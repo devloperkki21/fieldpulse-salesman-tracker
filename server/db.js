@@ -25,7 +25,9 @@ const PG_SCHEMA_SQL = fs.readFileSync(
 );
 
 const SQLITE_TEST_SCHEMA = `
-  CREATE TABLE IF NOT EXISTS users (
+  ATTACH DATABASE ':memory:' AS fieldpulse;
+
+  CREATE TABLE IF NOT EXISTS fieldpulse.users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     phone TEXT NOT NULL UNIQUE,
@@ -36,7 +38,7 @@ const SQLITE_TEST_SCHEMA = `
     created_at TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS location_punches (
+  CREATE TABLE IF NOT EXISTS fieldpulse.location_punches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     latitude REAL NOT NULL,
@@ -49,7 +51,7 @@ const SQLITE_TEST_SCHEMA = `
     punched_at TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS expenses (
+  CREATE TABLE IF NOT EXISTS fieldpulse.expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expense_date TEXT NOT NULL,
@@ -73,7 +75,7 @@ const SQLITE_TEST_SCHEMA = `
     updated_at TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS advances (
+  CREATE TABLE IF NOT EXISTS fieldpulse.advances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     advance_date TEXT NOT NULL,
@@ -86,7 +88,7 @@ const SQLITE_TEST_SCHEMA = `
     created_at TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS reimbursement_claims (
+  CREATE TABLE IF NOT EXISTS fieldpulse.reimbursement_claims (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     claim_date TEXT NOT NULL,
@@ -153,10 +155,10 @@ async function bootstrapAdminFromEnvIfConfigured(db) {
   const adminName = String(process.env.ADMIN_NAME || 'Head Office Admin').trim();
   if (!adminPhone || adminPin.length < 4) return;
 
-  const existing = await db.get("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
+  const existing = await db.get("SELECT COUNT(*) AS cnt FROM fieldpulse.users WHERE role = 'admin'");
   if (Number(existing?.cnt || 0) === 0) {
     await db.run(
-      `INSERT INTO users (name, phone, role, territory, pin_hash, active, created_at)
+      `INSERT INTO fieldpulse.users (name, phone, role, territory, pin_hash, active, created_at)
        VALUES ($1, $2, 'admin', 'Head Office', $3, 1, $4)`,
       [adminName, adminPhone, hashPin(adminPin), new Date().toISOString()],
     );
@@ -195,7 +197,7 @@ export async function initDatabase(options = {}) {
     max: 10,
   });
 
-  // Ensure Supabase tables and indexes exist on startup
+  // Ensure isolated fieldpulse schema, tables, and indexes exist on startup
   await pool.query(PG_SCHEMA_SQL);
   const db = createPgAdapter(pool);
   await bootstrapAdminFromEnvIfConfigured(db);

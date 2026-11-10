@@ -50,7 +50,7 @@ export function createApp(db) {
     if (!payload) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    const user = await db.get('SELECT * FROM users WHERE id = $1', [payload.id]);
+    const user = await db.get('SELECT * FROM fieldpulse.users WHERE id = $1', [payload.id]);
     if (!user || !user.active) {
       return res.status(401).json({ error: 'Account inactive or not found' });
     }
@@ -72,12 +72,12 @@ export function createApp(db) {
 
   // First-time Admin setup check (only active when 0 admin accounts exist in live DB)
   app.get('/api/auth/setup-status', asyncHandler(async (_req, res) => {
-    const row = await db.get("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
+    const row = await db.get("SELECT COUNT(*) AS cnt FROM fieldpulse.users WHERE role = 'admin'");
     res.json({ needsSetup: Number(row?.cnt || 0) === 0 });
   }));
 
   app.post('/api/auth/setup', asyncHandler(async (req, res) => {
-    const existing = await db.get("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
+    const existing = await db.get("SELECT COUNT(*) AS cnt FROM fieldpulse.users WHERE role = 'admin'");
     if (Number(existing?.cnt || 0) > 0) {
       return res.status(403).json({ error: 'Admin account is already configured. Please sign in.' });
     }
@@ -91,7 +91,7 @@ export function createApp(db) {
 
     const nowIso = new Date().toISOString();
     const inserted = await db.get(
-      `INSERT INTO users (name, phone, role, territory, pin_hash, active, created_at)
+      `INSERT INTO fieldpulse.users (name, phone, role, territory, pin_hash, active, created_at)
        VALUES ($1, $2, 'admin', 'Head Office', $3, 1, $4)
        RETURNING *`,
       [name, phone, hashPin(pin), nowIso],
@@ -108,7 +108,7 @@ export function createApp(db) {
     if (!phone || !pin) {
       return res.status(400).json({ error: 'Login ID and PIN are required' });
     }
-    const user = await db.get('SELECT * FROM users WHERE phone = $1', [phone]);
+    const user = await db.get('SELECT * FROM fieldpulse.users WHERE phone = $1', [phone]);
     if (!user || !user.active || !verifyPin(pin, user.pin_hash)) {
       return res.status(401).json({ error: 'Invalid credentials or inactive account' });
     }
@@ -132,7 +132,7 @@ export function createApp(db) {
       return res.status(403).json({ error: 'Cannot view another salesman dashboard' });
     }
 
-    const salesmanRow = await db.get('SELECT * FROM users WHERE id = $1', [targetId]);
+    const salesmanRow = await db.get('SELECT * FROM fieldpulse.users WHERE id = $1', [targetId]);
     if (!salesmanRow || salesmanRow.role !== 'salesman') {
       return res.status(404).json({ error: 'Salesman not found' });
     }
@@ -142,19 +142,19 @@ export function createApp(db) {
       : getMonthKeyFromDate();
 
     const expenses = await db.all(
-      'SELECT * FROM expenses WHERE user_id = $1 ORDER BY expense_date ASC, id ASC',
+      'SELECT * FROM fieldpulse.expenses WHERE user_id = $1 ORDER BY expense_date ASC, id ASC',
       [targetId],
     );
     const advances = await db.all(
-      'SELECT * FROM advances WHERE user_id = $1 ORDER BY advance_date ASC, id ASC',
+      'SELECT * FROM fieldpulse.advances WHERE user_id = $1 ORDER BY advance_date ASC, id ASC',
       [targetId],
     );
     const claims = await db.all(
-      'SELECT * FROM reimbursement_claims WHERE user_id = $1 ORDER BY claim_date ASC, id ASC',
+      'SELECT * FROM fieldpulse.reimbursement_claims WHERE user_id = $1 ORDER BY claim_date ASC, id ASC',
       [targetId],
     );
     const punches = await db.all(
-      'SELECT * FROM location_punches WHERE user_id = $1 ORDER BY punched_at DESC, id DESC LIMIT 15',
+      'SELECT * FROM fieldpulse.location_punches WHERE user_id = $1 ORDER BY punched_at DESC, id DESC LIMIT 15',
       [targetId],
     );
 
@@ -194,7 +194,7 @@ export function createApp(db) {
 
     const punchedAt = new Date().toISOString();
     const punch = await db.get(
-      `INSERT INTO location_punches
+      `INSERT INTO fieldpulse.location_punches
         (user_id, latitude, longitude, accuracy, place_name, address, note, punch_type, punched_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
@@ -251,7 +251,7 @@ export function createApp(db) {
     const gpsPunchedAt = hasGps ? (req.body?.gps_punched_at || nowIso) : null;
 
     const expense = await db.get(
-      `INSERT INTO expenses (
+      `INSERT INTO fieldpulse.expenses (
         user_id, expense_date, month_key, place, departure, arrival,
         fare, da, conveyance, night_stay, total, paid_by, remarks,
         latitude, longitude, accuracy, gps_place, gps_punched_at, created_at, updated_at
@@ -283,7 +283,7 @@ export function createApp(db) {
 
     if (hasGps && req.body?.record_punch !== false) {
       await db.run(
-        `INSERT INTO location_punches
+        `INSERT INTO fieldpulse.location_punches
           (user_id, latitude, longitude, accuracy, place_name, address, note, punch_type, punched_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'trip_entry', $8)`,
         [
@@ -305,7 +305,7 @@ export function createApp(db) {
   // Update Expense Row
   app.put('/api/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const existing = await db.get('SELECT * FROM expenses WHERE id = $1', [id]);
+    const existing = await db.get('SELECT * FROM fieldpulse.expenses WHERE id = $1', [id]);
     if (!existing) {
       return res.status(404).json({ error: 'Expense entry not found' });
     }
@@ -333,7 +333,7 @@ export function createApp(db) {
     const nowIso = new Date().toISOString();
 
     const updated = await db.get(
-      `UPDATE expenses SET
+      `UPDATE fieldpulse.expenses SET
         expense_date = $1, month_key = $2, place = $3, departure = $4, arrival = $5,
         fare = $6, da = $7, conveyance = $8, night_stay = $9, total = $10,
         paid_by = $11, remarks = $12, updated_at = $13
@@ -363,14 +363,14 @@ export function createApp(db) {
   // Delete Expense Row
   app.delete('/api/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const existing = await db.get('SELECT * FROM expenses WHERE id = $1', [id]);
+    const existing = await db.get('SELECT * FROM fieldpulse.expenses WHERE id = $1', [id]);
     if (!existing) {
       return res.status(404).json({ error: 'Expense entry not found' });
     }
     if (req.user.role !== 'admin' && Number(existing.user_id) !== req.user.id) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    await db.run('DELETE FROM expenses WHERE id = $1', [id]);
+    await db.run('DELETE FROM fieldpulse.expenses WHERE id = $1', [id]);
     return res.json({ deleted: true, id });
   }));
 
@@ -396,7 +396,7 @@ export function createApp(db) {
 
     const nowIso = new Date().toISOString();
     const claim = await db.get(
-      `INSERT INTO reimbursement_claims (user_id, claim_date, month_key, amount, reason, status, created_at)
+      `INSERT INTO fieldpulse.reimbursement_claims (user_id, claim_date, month_key, amount, reason, status, created_at)
        VALUES ($1, $2, $3, $4, $5, 'pending', $6)
        RETURNING *`,
       [targetUserId, claimDate, monthKey, amount, reason, nowIso],
@@ -412,23 +412,23 @@ export function createApp(db) {
       : getMonthKeyFromDate();
 
     const salesmenRows = await db.all(
-      "SELECT * FROM users WHERE role = 'salesman' ORDER BY active DESC, name ASC",
+      "SELECT * FROM fieldpulse.users WHERE role = 'salesman' ORDER BY active DESC, name ASC",
     );
-    const allExpenses = await db.all('SELECT * FROM expenses ORDER BY expense_date ASC, id ASC');
-    const allAdvances = await db.all('SELECT * FROM advances ORDER BY advance_date ASC, id ASC');
+    const allExpenses = await db.all('SELECT * FROM fieldpulse.expenses ORDER BY expense_date ASC, id ASC');
+    const allAdvances = await db.all('SELECT * FROM fieldpulse.advances ORDER BY advance_date ASC, id ASC');
     const allClaims = await db.all(
       `SELECT rc.*, u.name AS user_name, u.phone AS user_phone, u.territory AS user_territory
-       FROM reimbursement_claims rc
-       JOIN users u ON u.id = rc.user_id
+       FROM fieldpulse.reimbursement_claims rc
+       JOIN fieldpulse.users u ON u.id = rc.user_id
        ORDER BY CASE rc.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'paid' THEN 2 ELSE 3 END, rc.created_at DESC, rc.id DESC`,
     );
 
     const latestPunches = await db.all(
       `SELECT lp.*
-       FROM location_punches lp
+       FROM fieldpulse.location_punches lp
        INNER JOIN (
          SELECT user_id, MAX(id) AS max_id
-         FROM location_punches
+         FROM fieldpulse.location_punches
          GROUP BY user_id
        ) latest ON lp.id = latest.max_id`,
     );
@@ -436,8 +436,8 @@ export function createApp(db) {
 
     const recentPunches = await db.all(
       `SELECT lp.*, u.name AS user_name, u.territory AS user_territory
-       FROM location_punches lp
-       JOIN users u ON u.id = lp.user_id
+       FROM fieldpulse.location_punches lp
+       JOIN fieldpulse.users u ON u.id = lp.user_id
        ORDER BY lp.punched_at DESC, lp.id DESC
        LIMIT 30`,
     );
@@ -529,7 +529,7 @@ export function createApp(db) {
     const reference = String(req.body?.reference || '').trim().slice(0, 80);
     const note = String(req.body?.note || '').trim().slice(0, 200);
 
-    const target = await db.get("SELECT id FROM users WHERE id = $1 AND role = 'salesman'", [userId]);
+    const target = await db.get("SELECT id FROM fieldpulse.users WHERE id = $1 AND role = 'salesman'", [userId]);
     if (!target) {
       return res.status(404).json({ error: 'Salesman not found' });
     }
@@ -540,7 +540,7 @@ export function createApp(db) {
     const monthKey = advanceDate.slice(0, 7);
     const nowIso = new Date().toISOString();
     const advance = await db.get(
-      `INSERT INTO advances (user_id, advance_date, month_key, amount, mode, reference, note, given_by, created_at)
+      `INSERT INTO fieldpulse.advances (user_id, advance_date, month_key, amount, mode, reference, note, given_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [userId, advanceDate, monthKey, amount, mode, reference, note, req.user.id, nowIso],
@@ -551,16 +551,16 @@ export function createApp(db) {
 
   app.delete('/api/admin/advances/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const existing = await db.get('SELECT id FROM advances WHERE id = $1', [id]);
+    const existing = await db.get('SELECT id FROM fieldpulse.advances WHERE id = $1', [id]);
     if (!existing) return res.status(404).json({ error: 'Advance not found' });
-    await db.run('DELETE FROM advances WHERE id = $1', [id]);
+    await db.run('DELETE FROM fieldpulse.advances WHERE id = $1', [id]);
     return res.json({ deleted: true, id });
   }));
 
   // Admin: Update Reimbursement Claim Status
   app.patch('/api/admin/claims/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const claim = await db.get('SELECT * FROM reimbursement_claims WHERE id = $1', [id]);
+    const claim = await db.get('SELECT * FROM fieldpulse.reimbursement_claims WHERE id = $1', [id]);
     if (!claim) {
       return res.status(404).json({ error: 'Claim not found' });
     }
@@ -587,7 +587,7 @@ export function createApp(db) {
     const paidAt = nextStatus === 'paid' ? claim.paid_at || nowIso : null;
 
     const updated = await db.get(
-      `UPDATE reimbursement_claims
+      `UPDATE fieldpulse.reimbursement_claims
        SET status = $1, admin_note = $2, reviewed_by = $3, reviewed_at = $4,
            paid_at = $5, payout_mode = $6, payout_ref = $7
        WHERE id = $8
@@ -608,14 +608,14 @@ export function createApp(db) {
     if (!name || !phone || pin.length < 4) {
       return res.status(400).json({ error: 'Name, mobile/ID, and a 4+ digit PIN are required' });
     }
-    const exists = await db.get('SELECT id FROM users WHERE phone = $1', [phone]);
+    const exists = await db.get('SELECT id FROM fieldpulse.users WHERE phone = $1', [phone]);
     if (exists) {
       return res.status(409).json({ error: 'A user with this mobile/ID already exists' });
     }
 
     const nowIso = new Date().toISOString();
     const created = await db.get(
-      `INSERT INTO users (name, phone, role, territory, pin_hash, active, created_at)
+      `INSERT INTO fieldpulse.users (name, phone, role, territory, pin_hash, active, created_at)
        VALUES ($1, $2, 'salesman', $3, $4, 1, $5)
        RETURNING *`,
       [name, phone, territory, hashPin(pin), nowIso],
@@ -626,7 +626,7 @@ export function createApp(db) {
 
   app.patch('/api/admin/salesmen/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const existing = await db.get("SELECT * FROM users WHERE id = $1 AND role = 'salesman'", [id]);
+    const existing = await db.get("SELECT * FROM fieldpulse.users WHERE id = $1 AND role = 'salesman'", [id]);
     if (!existing) {
       return res.status(404).json({ error: 'Salesman not found' });
     }
@@ -638,7 +638,7 @@ export function createApp(db) {
     const pinHash = newPin.length >= 4 ? hashPin(newPin) : existing.pin_hash;
 
     const updated = await db.get(
-      `UPDATE users SET name = $1, territory = $2, active = $3, pin_hash = $4
+      `UPDATE fieldpulse.users SET name = $1, territory = $2, active = $3, pin_hash = $4
        WHERE id = $5
        RETURNING *`,
       [name || existing.name, territory, active, pinHash, id],
