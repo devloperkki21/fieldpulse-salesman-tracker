@@ -1,0 +1,71 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+:root {
+  --bg-paper: #fafaf8;
+  --bg-card: #ffffff;
+  --bg-subtle: #f3f2ed;
+  --ink: #111315;
+  --ink-muted: #5d646e;
+  --hairline: #e5e3dc;
+  --signal: #0d9488;
+  --signal-deep: #0f766e;
+  --amber: #c2410c;
+  --amber-soft: #fff7ed;
+}
+
+@layer base {
+  html,
+  body {
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-paper);
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .font-mono-num {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+.gps-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: #0d9488;
+  animation: pulse-ring 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+/* Custom slim scrollbar for horizontal ledger table on mobile */
+.ledger-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.ledger-scroll::-webkit-scrollbar-track {
+  background: #f3f2ed;
+}
+.ledger-scroll::-webkit-scrollbar-thumb {
+  background: #d0cdc3;
+  border-radius: 999px;
+}
+
