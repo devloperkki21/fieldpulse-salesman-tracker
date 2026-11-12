@@ -1290,6 +1290,7 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
       <ExpenseFormModal
         open={expenseModalOpen}
         editing={editingExpense}
+        latestPunch={latestPunch}
         onClose={() => {
           setExpenseModalOpen(false);
           setEditingExpense(null);

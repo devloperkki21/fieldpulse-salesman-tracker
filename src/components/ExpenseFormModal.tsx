@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Crosshair, Loader2, MapPin, X } from 'lucide-react';
-import type { ExpenseEntry } from '../types';
+import type { ExpenseEntry, LocationPunch } from '../types';
 import { formatINR, getTodayDateStr } from '../utils/format';
 import { captureBrowserLocation, formatCoords } from '../utils/geo';
 
 interface ExpenseFormModalProps {
   open: boolean;
   editing?: ExpenseEntry | null;
+  latestPunch?: LocationPunch | null;
   onClose: () => void;
   onSave: (payload: {
     expense_date: string;
@@ -27,7 +28,13 @@ interface ExpenseFormModalProps {
   }) => Promise<void>;
 }
 
-export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseFormModalProps) {
+export function ExpenseFormModal({
+  open,
+  editing,
+  latestPunch,
+  onClose,
+  onSave,
+}: ExpenseFormModalProps) {
   const [expenseDate, setExpenseDate] = useState(getTodayDateStr());
   const [place, setPlace] = useState('');
   const [departure, setDeparture] = useState('08:30');
@@ -228,9 +235,32 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
               </p>
             )}
             {gpsError && (
-              <p className="mt-2 rounded-lg bg-[#FFF7ED] px-2.5 py-1.5 text-xs text-[#C2410C]">
-                {gpsError}
-              </p>
+              <div className="mt-2 space-y-2 rounded-lg bg-[#FFF7ED] px-2.5 py-2 text-xs text-[#C2410C]">
+                <p>{gpsError}</p>
+                {latestPunch && !editing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fallbackPlace =
+                        latestPunch.place_name ||
+                        formatCoords(latestPunch.latitude, latestPunch.longitude);
+                      setGps({
+                        latitude: latestPunch.latitude,
+                        longitude: latestPunch.longitude,
+                        accuracy: latestPunch.accuracy,
+                        place_name: fallbackPlace,
+                        capturedAt: latestPunch.punched_at,
+                      });
+                      setPlace(fallbackPlace);
+                      setGpsError('');
+                    }}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#111315] px-2.5 text-[11px] font-semibold text-white hover:bg-black"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    Use Last Punched GPS ({latestPunch.place_name || 'Saved Pin'})
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

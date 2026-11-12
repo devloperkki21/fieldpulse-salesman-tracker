@@ -71,60 +71,114 @@ async function reverseGeocode(lat: number, lng: number): Promise<{ place_name: s
   }
 }
 
-export function captureBrowserLocation(): Promise<CapturedLocation> {
+function getPosition(options: PositionOptions): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      reject(new Error('Browser does not support Geolocation API.'));
-      return;
-    }
-
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-      reject(
-        new Error(
-          'Browser requires HTTPS or localhost to access GPS. Open on localhost or HTTPS.',
-        ),
-      );
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        const geo = await reverseGeocode(latitude, longitude);
-        resolve({
-          latitude,
-          longitude,
-          accuracy: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
-          place_name: geo.place_name,
-          address: geo.address,
-          capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
-        });
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          reject(
-            new Error(
-              'Location permission denied. Please allow Location access in your browser site settings and retry.',
-            ),
-          );
-          return;
-        }
-        if (err.code === err.POSITION_UNAVAILABLE) {
-          reject(new Error('GPS signal unavailable right now. Turn on device location and retry.'));
-          return;
-        }
-        if (err.code === err.TIMEOUT) {
-          reject(new Error('Location request timed out. Move near open sky or retry.'));
-          return;
-        }
-        reject(new Error(err.message || 'Unable to fetch GPS location.'));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 0,
-      },
-    );
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
   });
+}
+
+async function fetchNetworkLocationFallback(): Promise<CapturedLocation | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch('https://get.geojs.io/v1/ip/geo.json', {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const latitude = Number(data?.latitude);
+    const longitude = Number(data?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    const city = [data?.city, data?.region, data?.country].filter(Boolean).join(', ');
+    const fallbackName = city || formatCoords(latitude, longitude);
+    return {
+      latitude,
+      longitude,
+      accuracy: null,
+      place_name: fallbackName.slice(0, 140),
+      address: fallbackName.slice(0, 280),
+      capturedAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function captureBrowserLocation(): Promise<CapturedLocation> {
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    throw new Error('Browser does not support Geolocation API.');
+  }
+
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    throw new Error(
+      'Browser requires HTTPS or localhost to access GPS. Open on localhost or HTTPS.',
+    );
+  }
+
+  let position: GeolocationPosition | null = null;
+  let lastError: GeolocationPositionError | null = null;
+
+  try {
+    // Pass 1: High accuracy GPS (accept recent 1-min cached fix to avoid indoor hangs)
+    position = await getPosition({
+      enableHighAccuracy: true,
+      timeout: 7000,
+      maximumAge: 60000,
+    });
+  } catch (err) {
+    const posErr = err as GeolocationPositionError;
+    lastError = posErr;
+    if (posErr && posErr.code === 1) {
+      throw new Error(
+        'Location permission denied. Please allow Location access in your browser site settings and retry.',
+      );
+    }
+
+    // Pass 2: Standard accuracy (Wi-Fi / OS location — much faster & reliable on desktop/laptops)
+    try {
+      position = await getPosition({
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 300000,
+      });
+    } catch (err2) {
+      lastError = err2 as GeolocationPositionError;
+      if (lastError && lastError.code === 1) {
+        throw new Error(
+          'Location permission denied. Please allow Location access in your browser site settings and retry.',
+        );
+      }
+    }
+  }
+
+  if (position) {
+    const { latitude, longitude, accuracy } = position.coords;
+    const geo = await reverseGeocode(latitude, longitude);
+    return {
+      latitude,
+      longitude,
+      accuracy: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
+      place_name: geo.place_name,
+      address: geo.address,
+      capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+    };
+  }
+
+  // Pass 3: If device OS location timed out / unavailable on desktop, try network geolocation fallback
+  const networkLoc = await fetchNetworkLocationFallback();
+  if (networkLoc) {
+    return networkLoc;
+  }
+
+  if (lastError?.code === 2) {
+    throw new Error('GPS signal unavailable right now. Turn on device location and retry.');
+  }
+  if (lastError?.code === 3) {
+    throw new Error('Location request timed out. Turn on device location or retry.');
+  }
+  throw new Error(lastError?.message || 'Unable to fetch GPS location.');
 }
 

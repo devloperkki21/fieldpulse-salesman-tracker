@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, MapPin, ShieldCheck, Smartphone } from 'lucide-react';
+import { ArrowRight, MapPin, ShieldCheck } from 'lucide-react';
 import { api, setStoredToken } from '../api';
 import type { User } from '../types';
 
@@ -9,7 +9,6 @@ interface LoginScreenProps {
 
 export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
-  const [roleTab, setRoleTab] = useState<'salesman' | 'admin'>('salesman');
 
   const [setupName, setSetupName] = useState('');
   const [phone, setPhone] = useState('');
@@ -56,13 +55,6 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     } finally {
       setLoading(false);
     }
-  }
-
-  function switchRoleTab(next: 'salesman' | 'admin') {
-    setRoleTab(next);
-    setError('');
-    setPhone('');
-    setPin('');
   }
 
   return (
@@ -164,48 +156,23 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           </div>
         ) : (
           <div className="rounded-3xl border border-[#E5E3DC] bg-white p-5 sm:p-6">
-            {/* Role Switch */}
-            <div className="mb-5 grid grid-cols-2 rounded-2xl bg-[#F3F2ED] p-1">
-              <button
-                type="button"
-                onClick={() => switchRoleTab('salesman')}
-                className={`flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all ${
-                  roleTab === 'salesman'
-                    ? 'bg-white text-[#111315] shadow-xs'
-                    : 'text-[#5D646E] hover:text-[#111315]'
-                }`}
-              >
-                <Smartphone className="h-4 w-4" />
-                Salesman
-              </button>
-              <button
-                type="button"
-                onClick={() => switchRoleTab('admin')}
-                className={`flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all ${
-                  roleTab === 'admin'
-                    ? 'bg-white text-[#111315] shadow-xs'
-                    : 'text-[#5D646E] hover:text-[#111315]'
-                }`}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Admin
-              </button>
+            <div className="mb-4">
+              <h2 className="text-base font-bold text-[#111315]">Sign In</h2>
+              <p className="text-xs text-[#5D646E]">
+                Enter your credentials to open your Salesman or Admin dashboard automatically.
+              </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#5D646E]">
-                  {roleTab === 'admin' ? 'Name, Admin ID, or Mobile' : 'Name or Mobile Number'}
+                  Name, Mobile Number, or Login ID
                 </label>
                 <input
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder={
-                    roleTab === 'admin'
-                      ? 'Enter your name, admin ID, or mobile'
-                      : 'Enter your name or mobile number'
-                  }
+                  placeholder="Enter your name, mobile number, or admin ID"
                   required
                   className="h-12 w-full rounded-xl border border-[#E5E3DC] bg-[#FAFAF8] px-3.5 text-sm font-medium text-[#111315] outline-none transition-colors focus:border-[#111315] focus:bg-white"
                 />
@@ -237,7 +204,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 disabled={loading || needsSetup === null}
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#111315] text-sm font-semibold text-white transition-colors hover:bg-black active:scale-[0.99] disabled:opacity-60"
               >
-                <span>{loading ? 'Signing in...' : `Sign In as ${roleTab === 'admin' ? 'Admin' : 'Salesman'}`}</span>
+                <span>{loading ? 'Signing in...' : 'Sign In'}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </form>
