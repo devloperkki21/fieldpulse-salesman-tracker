@@ -1,21 +1,17 @@
 # FieldPulse — Salesman Location & Expense Tracker
 
-Mobile-first field salesman tracker with live browser GPS location punching, daily travel & allowance ledger (`Place`, `Departure`, `Arrival`, `Fare`, `DA`, `Conveyance`, `Night Stay`, `Total`), live running balance tracking, out-of-pocket reimbursement claims, monthly charts, and separate **Salesman** and **Admin** dashboards backed by **Supabase PostgreSQL**.
+Mobile-first field salesman tracker with live browser GPS location punching, daily travel & allowance ledger (`Place`, `Departure`, `Arrival`, `Fare`, `DA`, `Conveyance`, `Night Stay`, `Total`), live running balance tracking, out-of-pocket reimbursement claims, monthly charts, and separate **Salesman** and **Admin** dashboards backed by **Supabase**.
 
-## Database Setup (Supabase)
+## Database Setup (Supabase API — No DB Password Needed)
 
-- All tables live in an isolated **`fieldpulse`** PostgreSQL schema (`fieldpulse.users`, `fieldpulse.location_punches`, `fieldpulse.expenses`, `fieldpulse.advances`, `fieldpulse.reimbursement_claims`) defined in [`supabase/schema.sql`](supabase/schema.sql).
-- On startup, the server automatically ensures the `fieldpulse` schema, tables, and indexes exist.
-- Set `DATABASE_URL` using your Supabase **Connection String (URI)** from **Project Settings → Database → Connection string** (or the **Connect** button → **Session pooler**):
-  ```text
-  postgresql://postgres.<project-ref>:<your-db-password>@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
-  ```
+- All tables use the `fp_*` prefix (`fp_users`, `fp_location_punches`, `fp_expenses`, `fp_advances`, `fp_reimbursement_claims`) with Row Level Security enabled in [`supabase/schema.sql`](supabase/schema.sql).
+- The backend connects over HTTPS using `@supabase/supabase-js` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (no PostgreSQL database password required).
 
 ## Local Development
 
 ```bash
 cp .env.example .env
-# Add your Supabase DB password to DATABASE_URL in .env
+# Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env
 npm install
 npm run dev
 ```
@@ -28,5 +24,5 @@ On first launch with an empty database, open the app and complete the **First-Ti
    - **Build Command:** `npm install --include=dev && npm run build`
    - **Start Command:** `npm start`
    - **Health Check Path:** `/api/health`
-2. Add environment variable `DATABASE_URL` with your Supabase PostgreSQL Pooler URI (`AUTH_SECRET` auto-generates via Blueprint).
+2. Add environment variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (`AUTH_SECRET` auto-generates via Blueprint).
 3. Render serves the app over HTTPS automatically, enabling mobile browser Geolocation permission for live GPS punches.
