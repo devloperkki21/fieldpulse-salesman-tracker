@@ -71,6 +71,20 @@ function createSupabaseApiStore(supabase) {
         await supabase.from('fp_users').select('*').eq('phone', phone).maybeSingle(),
       );
     },
+    async findUsersByIdentifier(identifier) {
+      const clean = String(identifier || '').trim();
+      if (!clean) return [];
+      const byPhone = unwrap(
+        await supabase.from('fp_users').select('*').eq('phone', clean),
+      );
+      if (byPhone.length > 0) return byPhone;
+      const escaped = clean.replace(/[%_\\]/g, '\\$&');
+      const byName = unwrap(
+        await supabase.from('fp_users').select('*').ilike('name', escaped),
+      );
+      const needle = clean.toLowerCase();
+      return byName.filter((u) => String(u.name || '').trim().toLowerCase() === needle);
+    },
     async createUser(fields) {
       return unwrap(
         await supabase.from('fp_users').insert(fields).select('*').single(),
@@ -218,6 +232,9 @@ function createSupabaseApiStore(supabase) {
           .single(),
       );
     },
+    async deleteClaim(id) {
+      unwrap(await supabase.from('fp_reimbursement_claims').delete().eq('id', Number(id)));
+    },
 
     async listPunchesByUser(userId, limit = 15) {
       return unwrap(
@@ -272,6 +289,14 @@ function createSupabaseApiStore(supabase) {
         await supabase.from('fp_location_punches').insert(fields).select('*').single(),
       );
     },
+    async getPunchById(id) {
+      return unwrap(
+        await supabase.from('fp_location_punches').select('*').eq('id', Number(id)).maybeSingle(),
+      );
+    },
+    async deletePunch(id) {
+      unwrap(await supabase.from('fp_location_punches').delete().eq('id', Number(id)));
+    },
     async close() {
       // Stateless HTTPS client
     },
@@ -294,6 +319,15 @@ function createSqlStore({ driver, get, all, run, close }) {
     },
     async findUserByPhone(phone) {
       return (await get('SELECT * FROM public.fp_users WHERE phone = $1', [phone])) || null;
+    },
+    async findUsersByIdentifier(identifier) {
+      const clean = String(identifier || '').trim();
+      if (!clean) return [];
+      const byPhone = await all('SELECT * FROM public.fp_users WHERE phone = $1', [clean]);
+      if (byPhone.length > 0) return byPhone;
+      return all('SELECT * FROM public.fp_users WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))', [
+        clean,
+      ]);
     },
     async createUser({ name, phone, role, territory, pin_hash, active, created_at }) {
       return get(
@@ -455,6 +489,9 @@ function createSqlStore({ driver, get, all, run, close }) {
         [f.status, f.admin_note, f.reviewed_by, f.reviewed_at, f.paid_at, f.payout_mode, f.payout_ref, Number(id)],
       );
     },
+    async deleteClaim(id) {
+      await run('DELETE FROM public.fp_reimbursement_claims WHERE id = $1', [Number(id)]);
+    },
 
     async listPunchesByUser(userId, limit = 15) {
       return all(
@@ -491,6 +528,14 @@ function createSqlStore({ driver, get, all, run, close }) {
          RETURNING *`,
         [f.user_id, f.latitude, f.longitude, f.accuracy, f.place_name, f.address, f.note, f.punch_type, f.punched_at],
       );
+    },
+    async getPunchById(id) {
+      return (
+        (await get('SELECT * FROM public.fp_location_punches WHERE id = $1', [Number(id)])) || null
+      );
+    },
+    async deletePunch(id) {
+      await run('DELETE FROM public.fp_location_punches WHERE id = $1', [Number(id)]);
     },
     close,
   };

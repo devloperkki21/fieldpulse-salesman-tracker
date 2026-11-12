@@ -8,6 +8,7 @@ import {
   Crosshair,
   Download,
   ExternalLink,
+  IndianRupee,
   LayoutGrid,
   Loader2,
   LogOut,
@@ -20,6 +21,7 @@ import {
   Table2,
   Trash2,
   Wallet,
+  X,
 } from 'lucide-react';
 import { api } from '../api';
 import type { ExpenseEntry, SalesmanDashboardData, User } from '../types';
@@ -75,6 +77,16 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
   // Expense modal states
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseEntry | null>(null);
+
+  // Add Office Balance / Tour Fund modal states
+  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+  const [advDate, setAdvDate] = useState(getTodayDateStr());
+  const [advAmount, setAdvAmount] = useState('');
+  const [advMode, setAdvMode] = useState('Cash');
+  const [advRef, setAdvRef] = useState('');
+  const [advNote, setAdvNote] = useState('');
+  const [advSaving, setAdvSaving] = useState(false);
+  const [advError, setAdvError] = useState('');
 
   // Reimbursement claim form
   const [claimAmount, setClaimAmount] = useState('');
@@ -179,6 +191,41 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
     await loadDashboard();
   }
 
+  async function handleSaveAdvance(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = Number(advAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAdvError('Please enter a valid advance amount.');
+      return;
+    }
+    setAdvSaving(true);
+    setAdvError('');
+    try {
+      await api.addAdvance({
+        advance_date: advDate,
+        amount,
+        mode: advMode,
+        reference: advRef.trim(),
+        note: advNote.trim() || 'Office tour advance',
+      });
+      setAdvAmount('');
+      setAdvRef('');
+      setAdvNote('');
+      setAdvanceModalOpen(false);
+      await loadDashboard();
+    } catch (err) {
+      setAdvError(err instanceof Error ? err.message : 'Failed to add office balance');
+    } finally {
+      setAdvSaving(false);
+    }
+  }
+
+  async function handleDeleteOwnAdvance(id: number) {
+    if (!window.confirm('Delete this office balance entry? Running balance will recalculate.')) return;
+    await api.deleteOwnAdvance(id);
+    await loadDashboard();
+  }
+
   async function handleSubmitClaim(e: React.FormEvent) {
     e.preventDefault();
     const amt = Number(claimAmount);
@@ -266,37 +313,61 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[#5D646E]">
                   Live Running Balance
                 </p>
-                <div className="mt-1 flex items-baseline gap-2.5">
+                <div className="mt-1 flex flex-wrap items-baseline gap-2.5">
                   <span
                     className={`font-mono-num text-3xl font-bold tracking-tight ${
-                      isNegativeBalance ? 'text-[#C2410C]' : 'text-[#111315]'
+                      live.outOfPocketDue > 0
+                        ? 'text-[#C2410C]'
+                        : isNegativeBalance
+                          ? 'text-[#111315]'
+                          : 'text-[#111315]'
                     }`}
                   >
                     {formatSignedINR(live.liveBalance)}
                   </span>
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                      isNegativeBalance
+                      live.outOfPocketDue > 0
                         ? 'bg-[#FFF7ED] text-[#C2410C]'
-                        : 'bg-[#0D9488]/12 text-[#0F766E]'
+                        : live.officeDeficit > 0
+                          ? 'bg-[#F3F2ED] text-[#5D646E]'
+                          : 'bg-[#0D9488]/12 text-[#0F766E]'
                     }`}
                   >
-                    {isNegativeBalance ? 'Out-of-Pocket Due' : 'Cash in Hand'}
+                    {live.outOfPocketDue > 0
+                      ? 'Out-of-Pocket Due'
+                      : live.officeDeficit > 0
+                        ? 'Office Advance Needed'
+                        : 'Cash in Hand'}
                   </span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingExpense(null);
-                  setExpenseModalOpen(true);
-                }}
-                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-[#111315] px-4 text-xs font-semibold text-white transition-colors hover:bg-black active:scale-[0.98]"
-              >
-                <Plus className="h-4 w-4" />
-                Add Trip / Expense
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdvDate(getTodayDateStr());
+                    setAdvError('');
+                    setAdvanceModalOpen(true);
+                  }}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-[#0D9488]/40 bg-[#0D9488]/10 px-3.5 text-xs font-semibold text-[#0F766E] transition-colors hover:bg-[#0D9488]/15 active:scale-[0.98]"
+                >
+                  <IndianRupee className="h-3.5 w-3.5" />
+                  Add Office Balance
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingExpense(null);
+                    setExpenseModalOpen(true);
+                  }}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-[#111315] px-4 text-xs font-semibold text-white transition-colors hover:bg-black active:scale-[0.98]"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Trip / Expense
+                </button>
+              </div>
             </div>
 
             {/* 3-Column Accounting Split: Office Advance | Total Spent | Reimbursed */}
@@ -320,7 +391,7 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                   {formatINR(month.totalExpenses)}
                 </p>
                 <p className="text-[10px] text-[#5D646E]">
-                  {month.tripCount} {month.tripCount === 1 ? 'trip' : 'trips'}
+                  Office {formatINR(month.officePaidExpenses)} · Self {formatINR(month.selfPaidExpenses)}
                 </p>
               </div>
               <div className="rounded-xl bg-[#FAFAF8] px-2.5 py-2 sm:px-3">
@@ -337,6 +408,29 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                 </p>
               </div>
             </div>
+
+            {/* Missing Office Advance Helper Strip */}
+            {live.officeDeficit > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#E5E3DC] bg-[#FAFAF8] px-3.5 py-2.5">
+                <div className="text-xs text-[#111315]">
+                  <span className="font-semibold">
+                    {formatINR(live.officeDeficit)} spent from Office funds
+                  </span>{' '}
+                  without a matching Office Advance recorded yet.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdvDate(getTodayDateStr());
+                    setAdvError('');
+                    setAdvanceModalOpen(true);
+                  }}
+                  className="rounded-lg bg-[#0D9488] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  + Add Office Balance
+                </button>
+              </div>
+            )}
 
             {/* Out-of-Pocket Reimbursement Alert Strip */}
             {live.unclaimedOutOfPocket > 0 && (
@@ -641,11 +735,20 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                         <tr key={row.id} className="hover:bg-[#FAFAF8]">
                           <td className="sticky left-0 z-10 bg-white px-3.5 py-3">
                             <div className="font-semibold text-[#111315]">{row.place}</div>
+                            {row.remarks && (
+                              <div className="max-w-[200px] truncate text-[11px] text-[#5D646E]">
+                                {row.remarks}
+                              </div>
+                            )}
                             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#5D646E]">
                               <span>{formatShortDate(row.expense_date)}</span>
-                              {row.paid_by === 'self' && (
+                              {row.paid_by === 'self' ? (
                                 <span className="rounded bg-[#FFF7ED] px-1.5 py-0.5 text-[10px] font-semibold text-[#C2410C]">
-                                  Self
+                                  Own Pocket
+                                </span>
+                              ) : (
+                                <span className="rounded bg-[#0D9488]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0F766E]">
+                                  Office
                                 </span>
                               )}
                             </div>
@@ -755,12 +858,19 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-[#111315]">{row.place}</span>
-                          {row.paid_by === 'self' && (
+                          {row.paid_by === 'self' ? (
                             <span className="rounded bg-[#FFF7ED] px-1.5 py-0.5 text-[10px] font-semibold text-[#C2410C]">
-                              Self Paid
+                              Own Pocket
+                            </span>
+                          ) : (
+                            <span className="rounded bg-[#0D9488]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0F766E]">
+                              Office
                             </span>
                           )}
                         </div>
+                        {row.remarks && (
+                          <p className="mt-0.5 text-xs text-[#5D646E]">{row.remarks}</p>
+                        )}
                         <p className="font-mono-num mt-0.5 text-xs text-[#5D646E]">
                           {formatShortDate(row.expense_date)} · Dep {row.departure || '--'} → Arr {row.arrival || '--'}
                         </p>
@@ -984,13 +1094,27 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
 
             {/* Office Advances Received in Selected Month */}
             <section className="rounded-3xl border border-[#E5E3DC] bg-white p-4">
-              <div className="mb-2.5 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#5D646E]">
-                  Office Advances Received ({formatMonthLabel(monthKey, true)})
-                </h3>
-                <span className="font-mono-num text-xs font-bold text-[#0F766E]">
-                  {formatINR(month.advance)}
-                </span>
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#5D646E]">
+                    Office Advances / Tour Funds ({formatMonthLabel(monthKey, true)})
+                  </h3>
+                  <p className="font-mono-num text-xs font-bold text-[#0F766E]">
+                    Total Received: {formatINR(month.advance)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdvDate(getTodayDateStr());
+                    setAdvError('');
+                    setAdvanceModalOpen(true);
+                  }}
+                  className="inline-flex h-9 items-center gap-1 rounded-xl bg-[#0D9488] px-3 text-xs font-semibold text-white hover:bg-[#0F766E]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Office Balance
+                </button>
               </div>
               {ledger.advances.length ? (
                 <div className="divide-y divide-[#E5E3DC]">
@@ -1010,15 +1134,27 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
                           </p>
                         </div>
                       </div>
-                      <span className="font-mono-num text-sm font-bold text-[#0F766E]">
-                        +{formatINR(adv.amount)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono-num text-sm font-bold text-[#0F766E]">
+                          +{formatINR(adv.amount)}
+                        </span>
+                        {Number(adv.given_by) === user.id && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteOwnAdvance(adv.id)}
+                            aria-label="Delete office balance"
+                            className="rounded-lg p-1.5 text-[#5D646E] hover:bg-[#FFF7ED] hover:text-[#C2410C]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="py-3 text-xs text-[#5D646E]">
-                  No office advances recorded in {formatMonthLabel(monthKey)}.
+                  No office advances recorded in {formatMonthLabel(monthKey)}. Tap &ldquo;Add Office Balance&rdquo; above if you received tour funds.
                 </p>
               )}
             </section>
@@ -1160,6 +1296,130 @@ export function SalesmanDashboard({ user, onLogout }: SalesmanDashboardProps) {
         }}
         onSave={handleSaveExpense}
       />
+
+      {advanceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <div className="w-full max-w-md rounded-t-3xl border border-[#E5E3DC] bg-[#FAFAF8] shadow-2xl sm:rounded-3xl">
+            <div className="flex items-center justify-between border-b border-[#E5E3DC] bg-white px-5 py-4 rounded-t-3xl">
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-[#111315]">
+                  Add Office Balance / Tour Fund
+                </h2>
+                <p className="text-xs text-[#5D646E]">
+                  Record money received from office for this trip or tour
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdvanceModalOpen(false)}
+                aria-label="Close"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E3DC] text-[#5D646E] hover:bg-[#F3F2ED] hover:text-[#111315]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdvance} className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
+                  Trip / Tour Name
+                </label>
+                <input
+                  type="text"
+                  value={advNote}
+                  onChange={(e) => setAdvNote(e.target.value)}
+                  placeholder="e.g. Jaipur Tour Budget / Week 2 Advance"
+                  required
+                  className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
+                    Amount Received (₹)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="1"
+                    step="any"
+                    value={advAmount}
+                    onChange={(e) => setAdvAmount(e.target.value)}
+                    placeholder="5000"
+                    required
+                    className="font-mono-num h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm font-semibold text-[#111315] outline-none focus:border-[#111315]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={advDate}
+                    onChange={(e) => setAdvDate(e.target.value)}
+                    required
+                    className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
+                    Mode
+                  </label>
+                  <select
+                    value={advMode}
+                    onChange={(e) => setAdvMode(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
+                    Reference (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={advRef}
+                    onChange={(e) => setAdvRef(e.target.value)}
+                    placeholder="UTR / Voucher no."
+                    className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
+                  />
+                </div>
+              </div>
+
+              {advError && (
+                <p className="rounded-xl bg-[#FFF7ED] px-3 py-2 text-xs font-medium text-[#C2410C]">
+                  {advError}
+                </p>
+              )}
+
+              <div className="flex gap-2.5 pt-1 pb-safe">
+                <button
+                  type="button"
+                  onClick={() => setAdvanceModalOpen(false)}
+                  className="h-12 flex-1 rounded-xl border border-[#E5E3DC] bg-white text-sm font-semibold text-[#5D646E]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={advSaving}
+                  className="h-12 flex-[2] rounded-xl bg-[#0D9488] text-sm font-semibold text-white transition-colors hover:bg-[#0F766E] disabled:opacity-60"
+                >
+                  {advSaving ? 'Saving...' : 'Add Office Balance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

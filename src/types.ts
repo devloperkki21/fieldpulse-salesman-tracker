@@ -92,6 +92,7 @@ export interface LedgerMonthTotals {
   conveyance: number;
   nightStay: number;
   totalExpenses: number;
+  officePaidExpenses: number;
   selfPaidExpenses: number;
   paidClaims: number;
   pendingClaims: number;
@@ -103,6 +104,10 @@ export interface LedgerMonthTotals {
 export interface LiveWallet {
   totalAdvances: number;
   totalExpenses: number;
+  officeSpent: number;
+  selfSpent: number;
+  officeCashRemaining: number;
+  officeDeficit: number;
   totalPaidClaims: number;
   activeClaims: number;
   liveBalance: number;

@@ -59,10 +59,10 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  login(phone: string, pin: string) {
+  login(identifier: string, pin: string) {
     return request<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, pin }),
+      body: JSON.stringify({ identifier, phone: identifier, pin }),
     });
   },
   me() {
@@ -146,6 +146,23 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  addAdvance(payload: {
+    advance_date: string;
+    amount: number;
+    mode: string;
+    reference: string;
+    note: string;
+  }) {
+    return request<{ advance: AdvanceEntry }>('/api/advances', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  deleteOwnAdvance(id: number) {
+    return request<{ deleted: boolean; id: number }>(`/api/advances/${id}`, {
+      method: 'DELETE',
+    });
+  },
   adminOverview(monthKey: string) {
     return request<AdminOverviewData>(`/api/admin/overview?month=${encodeURIComponent(monthKey)}`);
   },
@@ -179,6 +196,16 @@ export const api = {
     return request<{ claim: ReimbursementClaim }>(`/api/admin/claims/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    });
+  },
+  deleteClaim(id: number) {
+    return request<{ deleted: boolean; id: number }>(`/api/admin/claims/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  deletePunch(id: number) {
+    return request<{ deleted: boolean; id: number }>(`/api/admin/punches/${id}`, {
+      method: 'DELETE',
     });
   },
   createSalesman(payload: { name: string; phone: string; territory: string; pin: string }) {

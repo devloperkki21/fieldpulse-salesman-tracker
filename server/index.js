@@ -105,13 +105,22 @@ export function createApp(db) {
   }));
 
   app.post('/api/auth/login', asyncHandler(async (req, res) => {
-    const phone = String(req.body?.phone || '').trim();
+    const identifier = String(
+      req.body?.identifier ?? req.body?.phone ?? req.body?.name ?? '',
+    ).trim();
     const pin = String(req.body?.pin || '').trim();
-    if (!phone || !pin) {
-      return res.status(400).json({ error: 'Login ID and PIN are required' });
+    if (!identifier || !pin) {
+      return res.status(400).json({ error: 'Name / Mobile ID and PIN are required' });
     }
-    const user = await db.findUserByPhone(phone);
-    if (!user || !user.active || !verifyPin(pin, user.pin_hash)) {
+    const candidates = await db.findUsersByIdentifier(identifier);
+    const activeMatches = candidates.filter((u) => u && u.active && verifyPin(pin, u.pin_hash));
+    if (activeMatches.length > 1) {
+      return res.status(409).json({
+        error: 'Multiple accounts share this name. Please sign in with your Mobile / Login ID.',
+      });
+    }
+    const user = activeMatches[0];
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials or inactive account' });
     }
     const clean = sanitizeUser(user);
@@ -207,7 +216,6 @@ export function createApp(db) {
         : req.user.id;
 
     const expenseDate = String(req.body?.expense_date || '').trim();
-    const place = String(req.body?.place || '').trim().slice(0, 160);
     const departure = String(req.body?.departure || '').trim().slice(0, 32);
     const arrival = String(req.body?.arrival || '').trim().slice(0, 32);
     const fare = Math.max(0, roundMoney(req.body?.fare));
@@ -217,22 +225,29 @@ export function createApp(db) {
     const paidBy = req.body?.paid_by === 'self' ? 'self' : 'office';
     const remarks = String(req.body?.remarks || '').trim().slice(0, 300);
 
+    const lat = req.body?.latitude !== undefined && req.body?.latitude !== null ? Number(req.body.latitude) : null;
+    const lng = req.body?.longitude !== undefined && req.body?.longitude !== null ? Number(req.body.longitude) : null;
+    const acc = req.body?.accuracy !== undefined && req.body?.accuracy !== null ? Number(req.body.accuracy) : null;
+    const hasGps = Number.isFinite(lat) && Number.isFinite(lng);
+    const rawPlace = String(req.body?.place || '').trim().slice(0, 160);
+    const rawGpsPlace = String(req.body?.gps_place || '').trim().slice(0, 160);
+    const place =
+      rawPlace ||
+      rawGpsPlace ||
+      (hasGps ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : '');
+
     if (!isValidDate(expenseDate)) {
       return res.status(400).json({ error: 'Valid expense_date (YYYY-MM-DD) is required' });
     }
     if (!place) {
-      return res.status(400).json({ error: 'Place is required' });
+      return res.status(400).json({ error: 'GPS Location is required to record expense' });
     }
 
     const total = computeExpenseTotal({ fare, da, conveyance, night_stay: nightStay });
     const monthKey = expenseDate.slice(0, 7);
     const nowIso = new Date().toISOString();
 
-    const lat = req.body?.latitude !== undefined && req.body?.latitude !== null ? Number(req.body.latitude) : null;
-    const lng = req.body?.longitude !== undefined && req.body?.longitude !== null ? Number(req.body.longitude) : null;
-    const acc = req.body?.accuracy !== undefined && req.body?.accuracy !== null ? Number(req.body.accuracy) : null;
-    const hasGps = Number.isFinite(lat) && Number.isFinite(lng);
-    const gpsPlace = hasGps ? String(req.body?.gps_place || place).trim().slice(0, 160) : '';
+    const gpsPlace = hasGps ? (rawGpsPlace || place) : '';
     const gpsPunchedAt = hasGps ? (req.body?.gps_punched_at || nowIso) : null;
 
     const expense = await db.createExpense({
@@ -369,6 +384,57 @@ export function createApp(db) {
     });
 
     return res.status(201).json({ claim });
+  }));
+
+  // Record Office Advance / Tour Balance (Salesman or Admin)
+  app.post('/api/advances', requireAuth, asyncHandler(async (req, res) => {
+    const userId =
+      req.user.role === 'admin' && req.body?.user_id
+        ? Number(req.body.user_id)
+        : req.user.id;
+    const advanceDate = isValidDate(req.body?.advance_date)
+      ? req.body.advance_date
+      : new Date().toISOString().slice(0, 10);
+    const amount = roundMoney(req.body?.amount);
+    const mode = String(req.body?.mode || 'Cash').trim().slice(0, 40);
+    const reference = String(req.body?.reference || '').trim().slice(0, 80);
+    const note = String(req.body?.note || '').trim().slice(0, 200);
+
+    const target = await db.findUserById(userId);
+    if (!target || target.role !== 'salesman') {
+      return res.status(404).json({ error: 'Salesman not found' });
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Advance amount must be greater than 0' });
+    }
+
+    const advance = await db.createAdvance({
+      user_id: userId,
+      advance_date: advanceDate,
+      month_key: advanceDate.slice(0, 7),
+      amount,
+      mode,
+      reference,
+      note: note || 'Office tour advance',
+      given_by: req.user.id,
+      created_at: new Date().toISOString(),
+    });
+
+    return res.status(201).json({ advance });
+  }));
+
+  app.delete('/api/advances/:id', requireAuth, asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await db.getAdvanceById(id);
+    if (!existing) return res.status(404).json({ error: 'Advance not found' });
+    if (
+      req.user.role !== 'admin' &&
+      !(Number(existing.user_id) === req.user.id && Number(existing.given_by) === req.user.id)
+    ) {
+      return res.status(403).json({ error: 'Only Admin can remove office-issued advances' });
+    }
+    await db.deleteAdvance(id);
+    return res.json({ deleted: true, id });
   }));
 
   // Admin Overview
@@ -547,6 +613,22 @@ export function createApp(db) {
     });
 
     return res.json({ claim: updated });
+  }));
+
+  app.delete('/api/admin/claims/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await db.getClaimById(id);
+    if (!existing) return res.status(404).json({ error: 'Claim not found' });
+    await db.deleteClaim(id);
+    return res.json({ deleted: true, id });
+  }));
+
+  app.delete('/api/admin/punches/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await db.getPunchById(id);
+    if (!existing) return res.status(404).json({ error: 'Location punch not found' });
+    await db.deletePunch(id);
+    return res.json({ deleted: true, id });
   }));
 
   // Admin: Create or Update Salesman

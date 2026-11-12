@@ -187,6 +187,24 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     await loadOverview();
   }
 
+  async function handleDeleteExpense(id: number) {
+    if (!window.confirm('Delete this expense entry? Running balance will recalculate.')) return;
+    await api.deleteExpense(id);
+    await loadOverview();
+  }
+
+  async function handleDeletePunch(id: number) {
+    if (!window.confirm('Delete this GPS location punch entry?')) return;
+    await api.deletePunch(id);
+    await loadOverview();
+  }
+
+  async function handleDeleteClaim(id: number) {
+    if (!window.confirm('Delete this reimbursement claim entry?')) return;
+    await api.deleteClaim(id);
+    await loadOverview();
+  }
+
   async function handleClaimAction(
     claimId: number,
     status: 'approved' | 'paid' | 'rejected',
@@ -388,7 +406,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                           {p.note || 'GPS Check-in'}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         <span className="font-mono-num text-[11px] text-[#5D646E]">
                           {formatTimeClock(p.punched_at)}
                         </span>
@@ -400,6 +418,14 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         >
                           Map
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePunch(p.id)}
+                          aria-label="Delete GPS punch"
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-[#5D646E] hover:bg-[#FFF7ED] hover:text-[#C2410C]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -503,6 +529,16 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         className="inline-flex h-9 items-center gap-1 rounded-xl bg-[#111315] px-3 text-xs font-semibold text-white"
                       >
                         Ledger
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdvUserId(String(item.user.id));
+                          setActiveTab('finance');
+                        }}
+                        className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#0D9488]/40 bg-[#0D9488]/10 px-3 text-xs font-semibold text-[#0F766E] hover:bg-[#0D9488]/15"
+                      >
+                        + Advance
                       </button>
                     </div>
                   </div>
@@ -622,12 +658,13 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                       <th className="px-3 py-3 text-right">Total</th>
                       <th className="px-3 py-3 text-right">Run. Bal</th>
                       <th className="px-3 py-3 text-center">GPS</th>
+                      <th className="px-3 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E3DC]">
                     {filteredExpenses.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="px-4 py-8 text-center text-xs text-[#5D646E]">
+                        <td colSpan={12} className="px-4 py-8 text-center text-xs text-[#5D646E]">
                           No expense entries found for this filter.
                         </td>
                       </tr>
@@ -636,8 +673,17 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <tr key={row.id} className="hover:bg-[#FAFAF8]">
                           <td className="sticky left-0 z-10 bg-white px-3.5 py-3">
                             <div className="font-semibold text-[#111315]">{row.salesmanName}</div>
-                            <div className="text-[11px] text-[#5D646E]">
-                              {formatShortDate(row.expense_date)}
+                            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#5D646E]">
+                              <span>{formatShortDate(row.expense_date)}</span>
+                              {row.paid_by === 'self' ? (
+                                <span className="rounded bg-[#FFF7ED] px-1.5 py-0.5 text-[10px] font-semibold text-[#C2410C]">
+                                  Own Pocket
+                                </span>
+                              ) : (
+                                <span className="rounded bg-[#0D9488]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0F766E]">
+                                  Office
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-3 py-3 font-medium text-[#111315]">
@@ -683,6 +729,16 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                               <span className="text-[#5D646E]">—</span>
                             )}
                           </td>
+                          <td className="px-3 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteExpense(row.id)}
+                              aria-label="Delete expense entry"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#5D646E] hover:bg-[#FFF7ED] hover:text-[#C2410C]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -699,7 +755,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <td className="font-mono-num px-3 py-3 text-right">{formatINR(ledgerTotals.conveyance)}</td>
                         <td className="font-mono-num px-3 py-3 text-right">{formatINR(ledgerTotals.nightStay)}</td>
                         <td className="font-mono-num px-3 py-3 text-right text-sm">{formatINR(ledgerTotals.total)}</td>
-                        <td colSpan={2} />
+                        <td colSpan={3} />
                       </tr>
                     </tfoot>
                   )}
@@ -919,9 +975,19 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                               {claim.payout_ref ? ` · Ref: ${claim.payout_ref}` : ''}
                             </p>
                           </div>
-                          <span className="font-mono-num text-base font-bold text-[#111315]">
-                            {formatINR(claim.amount)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono-num text-base font-bold text-[#111315]">
+                              {formatINR(claim.amount)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteClaim(claim.id)}
+                              aria-label="Delete claim"
+                              className="rounded-lg p-1.5 text-[#5D646E] hover:bg-[#FFF7ED] hover:text-[#C2410C]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         {(claim.status === 'pending' || claim.status === 'approved') && (

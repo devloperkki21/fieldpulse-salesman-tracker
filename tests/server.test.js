@@ -180,6 +180,97 @@ test('Clean production bootstrap: initial admin setup, salesman creation, GPS pu
     });
     assert.equal(dashAfter.data.ledger.live.liveBalance, 0);
     assert.equal(dashAfter.data.ledger.live.outOfPocketDue, 0);
+
+    // 8. Login by Salesman Name (case-insensitive)
+    const loginByName = await apiJson(srv.baseUrl, '/api/auth/login', {
+      method: 'POST',
+      body: { identifier: 'field rep 1', pin: '5678' },
+    });
+    assert.equal(loginByName.status, 200);
+    assert.equal(loginByName.data.user.id, salesmanId);
+
+    // 9. Office expense when advance = 0 does NOT report outOfPocketDue; records officeDeficit instead
+    const officeExpRes = await apiJson(srv.baseUrl, '/api/expenses', {
+      method: 'POST',
+      token: salesmanToken,
+      body: {
+        expense_date: today,
+        departure: '10:00',
+        arrival: '14:00',
+        fare: 400,
+        da: 100,
+        conveyance: 0,
+        night_stay: 0,
+        paid_by: 'office',
+        remarks: 'Client depot visit',
+        latitude: 26.9124,
+        longitude: 75.7873,
+        gps_place: 'Jaipur Station',
+      },
+    });
+    assert.equal(officeExpRes.status, 201);
+    assert.equal(officeExpRes.data.expense.place, 'Jaipur Station');
+    assert.equal(officeExpRes.data.expense.paid_by, 'office');
+
+    const dashDeficit = await apiJson(srv.baseUrl, `/api/salesman/dashboard?month=${monthKey}`, {
+      token: salesmanToken,
+    });
+    assert.equal(dashDeficit.data.ledger.live.liveBalance, -500);
+    assert.equal(dashDeficit.data.ledger.live.officeDeficit, 0); // has earlier self expense
+
+    const pureOfficeLedger = computeSalesmanLedger({
+      monthKey: '2026-11',
+      advances: [],
+      expenses: [
+        {
+          id: 99,
+          month_key: '2026-11',
+          expense_date: '2026-11-10',
+          fare: 500,
+          da: 0,
+          conveyance: 0,
+          night_stay: 0,
+          total: 500,
+          paid_by: 'office',
+        },
+      ],
+      claims: [],
+    });
+    assert.equal(pureOfficeLedger.live.liveBalance, -500);
+    assert.equal(pureOfficeLedger.live.outOfPocketDue, 0);
+    assert.equal(pureOfficeLedger.live.officeDeficit, 500);
+
+    // 10. Salesman adds & deletes their own Office Tour Advance
+    const ownAdv = await apiJson(srv.baseUrl, '/api/advances', {
+      method: 'POST',
+      token: salesmanToken,
+      body: { advance_date: today, amount: 2000, mode: 'Cash', note: 'Jaipur Tour Fund' },
+    });
+    assert.equal(ownAdv.status, 201);
+    const delOwnAdv = await apiJson(srv.baseUrl, `/api/advances/${ownAdv.data.advance.id}`, {
+      method: 'DELETE',
+      token: salesmanToken,
+    });
+    assert.equal(delOwnAdv.status, 200);
+
+    // 11. Admin deletes expense, punch, and claim entries
+    const delExp = await apiJson(srv.baseUrl, `/api/expenses/${officeExpRes.data.expense.id}`, {
+      method: 'DELETE',
+      token: adminToken,
+    });
+    assert.equal(delExp.status, 200);
+
+    const delPunch = await apiJson(srv.baseUrl, `/api/admin/punches/${punchRes.data.punch.id}`, {
+      method: 'DELETE',
+      token: adminToken,
+    });
+    assert.equal(delPunch.status, 200);
+
+    const delClaim = await apiJson(srv.baseUrl, `/api/admin/claims/${claimRes.data.claim.id}`, {
+      method: 'DELETE',
+      token: adminToken,
+    });
+    assert.equal(delClaim.status, 200);
   } finally {
     await srv.close();
   }

@@ -80,6 +80,12 @@ export function computeSalesmanLedger({
   const allExpenses = roundMoney(
     expenses.reduce((acc, e) => acc + Number(e.total || 0), 0),
   );
+  const allSelfPaid = roundMoney(
+    expenses
+      .filter((e) => e.paid_by === 'self')
+      .reduce((acc, e) => acc + Number(e.total || 0), 0),
+  );
+  const allOfficePaid = roundMoney(allExpenses - allSelfPaid);
   const allPaidClaims = roundMoney(
     claims
       .filter((c) => c.status === 'paid')
@@ -93,7 +99,12 @@ export function computeSalesmanLedger({
 
   const liveBalance = roundMoney(allAdvances + allPaidClaims - allExpenses);
   const cashInHand = liveBalance > 0 ? liveBalance : 0;
-  const outOfPocketDue = liveBalance < 0 ? roundMoney(Math.abs(liveBalance)) : 0;
+  // Only treat negative balance as out-of-pocket reimbursement when self-paid entries exist
+  const outOfPocketDue =
+    liveBalance < 0 && allSelfPaid > 0 ? roundMoney(Math.abs(liveBalance)) : 0;
+  const officeDeficit =
+    liveBalance < 0 && allSelfPaid === 0 ? roundMoney(Math.abs(liveBalance)) : 0;
+  const officeCashRemaining = roundMoney(allAdvances - allOfficePaid);
   const unclaimedOutOfPocket = roundMoney(Math.max(0, outOfPocketDue - allActiveClaims));
 
   // Build chronological timeline for the selected month to attach runningBalance to each row
@@ -172,6 +183,7 @@ export function computeSalesmanLedger({
       conveyance: roundMoney(monthTotals.conveyance),
       nightStay: roundMoney(monthTotals.nightStay),
       totalExpenses: roundMoney(monthTotals.total),
+      officePaidExpenses: roundMoney(monthTotals.total - monthTotals.selfPaid),
       selfPaidExpenses: roundMoney(monthTotals.selfPaid),
       paidClaims: monthPaidClaims,
       pendingClaims: monthPendingClaims,
@@ -182,6 +194,10 @@ export function computeSalesmanLedger({
     live: {
       totalAdvances: allAdvances,
       totalExpenses: allExpenses,
+      officeSpent: allOfficePaid,
+      selfSpent: allSelfPaid,
+      officeCashRemaining,
+      officeDeficit,
       totalPaidClaims: allPaidClaims,
       activeClaims: allActiveClaims,
       liveBalance,

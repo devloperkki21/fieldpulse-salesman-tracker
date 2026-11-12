@@ -51,6 +51,28 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
+  async function detectGpsLocation(overwritePlace = true) {
+    setGpsLoading(true);
+    setGpsError('');
+    try {
+      const loc = await captureBrowserLocation();
+      setGps({
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: loc.accuracy,
+        place_name: loc.place_name,
+        capturedAt: loc.capturedAt,
+      });
+      if (overwritePlace) {
+        setPlace(loc.place_name);
+      }
+    } catch (err) {
+      setGpsError(err instanceof Error ? err.message : 'Unable to capture GPS location');
+    } finally {
+      setGpsLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     setFormError('');
@@ -89,6 +111,7 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
       setPaidBy('office');
       setRemarks('');
       setGps(null);
+      void detectGpsLocation(true);
     }
   }, [open, editing]);
 
@@ -100,32 +123,14 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
   const stayNum = Math.max(0, Number(nightStay) || 0);
   const total = Math.round((fareNum + daNum + convNum + stayNum) * 100) / 100;
 
-  async function handleCaptureGps() {
-    setGpsLoading(true);
-    setGpsError('');
-    try {
-      const loc = await captureBrowserLocation();
-      setGps({
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        accuracy: loc.accuracy,
-        place_name: loc.place_name,
-        capturedAt: loc.capturedAt,
-      });
-      if (!place.trim()) {
-        setPlace(loc.place_name);
-      }
-    } catch (err) {
-      setGpsError(err instanceof Error ? err.message : 'Unable to capture GPS location');
-    } finally {
-      setGpsLoading(false);
-    }
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!editing && (!gps || !place.trim())) {
+      setFormError('Live GPS location must be captured before saving. Tap "Detect GPS" above.');
+      return;
+    }
     if (!place.trim()) {
-      setFormError('Please enter Place / Route name.');
+      setFormError('GPS place name is missing.');
       return;
     }
     setSaving(true);
@@ -145,7 +150,7 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
         latitude: gps ? gps.latitude : null,
         longitude: gps ? gps.longitude : null,
         accuracy: gps ? gps.accuracy : null,
-        gps_place: gps ? gps.place_name : '',
+        gps_place: gps ? gps.place_name : place.trim(),
         gps_punched_at: gps ? gps.capturedAt : null,
       });
       onClose();
@@ -185,34 +190,36 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[#5D646E]">
-                  Live Location Tag
+                  Auto GPS Location (Required)
                 </p>
-                {gps ? (
+                {gpsLoading ? (
+                  <p className="mt-1 text-xs font-medium text-[#0F766E]">
+                    Detecting your live browser location...
+                  </p>
+                ) : gps ? (
                   <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-[#0F766E]">
                     <MapPin className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{gps.place_name}</span>
                   </div>
                 ) : (
-                  <p className="mt-0.5 text-xs text-[#5D646E]">
-                    Attach live browser GPS coordinates to verify location
+                  <p className="mt-0.5 text-xs text-[#C2410C]">
+                    Location lock required to capture expense place automatically
                   </p>
                 )}
               </div>
-              {!editing && (
-                <button
-                  type="button"
-                  onClick={handleCaptureGps}
-                  disabled={gpsLoading}
-                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#0D9488] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E] disabled:opacity-60"
-                >
-                  {gpsLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Crosshair className="h-3.5 w-3.5" />
-                  )}
-                  {gps ? 'Re-Punch GPS' : 'Punch GPS'}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => void detectGpsLocation(true)}
+                disabled={gpsLoading}
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#0D9488] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#0F766E] disabled:opacity-60"
+              >
+                {gpsLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Crosshair className="h-3.5 w-3.5" />
+                )}
+                {gps ? 'Refresh GPS' : 'Detect GPS'}
+              </button>
             </div>
             {gps && (
               <p className="font-mono-num mt-1.5 text-[11px] text-[#5D646E]">
@@ -242,15 +249,15 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
-                Place / Route *
+                Place (Auto-picked from GPS)
               </label>
               <input
                 type="text"
                 value={place}
-                onChange={(e) => setPlace(e.target.value)}
-                placeholder="e.g. Delhi → Jaipur"
+                readOnly
+                placeholder={gpsLoading ? 'Fetching GPS place...' : 'Waiting for GPS lock'}
                 required
-                className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
+                className="h-11 w-full cursor-not-allowed rounded-xl border border-[#E5E3DC] bg-[#F3F2ED] px-3 text-sm font-medium text-[#111315] outline-none"
               />
             </div>
           </div>
@@ -391,13 +398,13 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
 
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#5D646E]">
-              Remarks (Optional)
+              Remarks / Trip Notes
             </label>
             <input
               type="text"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Client name, hotel or ticket note"
+              placeholder="Write route, client visit, hotel, or bill details here"
               className="h-11 w-full rounded-xl border border-[#E5E3DC] bg-white px-3 text-sm text-[#111315] outline-none focus:border-[#111315]"
             />
           </div>
@@ -418,10 +425,16 @@ export function ExpenseFormModal({ open, editing, onClose, onSave }: ExpenseForm
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (!editing && (gpsLoading || !gps || !place.trim()))}
               className="h-12 flex-[2] rounded-xl bg-[#111315] text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
             >
-              {saving ? 'Saving...' : editing ? 'Update Entry' : 'Save Expense Row'}
+              {saving
+                ? 'Saving...'
+                : !editing && gpsLoading
+                  ? 'Detecting GPS...'
+                  : editing
+                    ? 'Update Entry'
+                    : 'Save Expense Row'}
             </button>
           </div>
         </form>

@@ -195,15 +195,19 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#5D646E]">
-                  {roleTab === 'admin' ? 'Admin ID / Mobile' : 'Mobile Number'}
+                  {roleTab === 'admin' ? 'Name, Admin ID, or Mobile' : 'Name or Mobile Number'}
                 </label>
                 <input
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder={roleTab === 'admin' ? 'Enter admin ID' : 'Enter 10-digit mobile number'}
+                  placeholder={
+                    roleTab === 'admin'
+                      ? 'Enter your name, admin ID, or mobile'
+                      : 'Enter your name or mobile number'
+                  }
                   required
-                  className="font-mono-num h-12 w-full rounded-xl border border-[#E5E3DC] bg-[#FAFAF8] px-3.5 text-sm font-medium text-[#111315] outline-none transition-colors focus:border-[#111315] focus:bg-white"
+                  className="h-12 w-full rounded-xl border border-[#E5E3DC] bg-[#FAFAF8] px-3.5 text-sm font-medium text-[#111315] outline-none transition-colors focus:border-[#111315] focus:bg-white"
                 />
               </div>
 
