@@ -25,7 +25,7 @@ On first launch with an empty database, open the app and complete the **First-Ti
 ## Deploy on Render
 
 1. Connect this GitHub repository on [Render](https://dashboard.render.com/blueprints) (**New → Blueprint**, uses [`render.yaml`](render.yaml)) or **New → Web Service**:
-   - **Build Command:** `npm install && npm run build`
+   - **Build Command:** `npm install --include=dev && npm run build`
    - **Start Command:** `npm start`
    - **Health Check Path:** `/api/health`
 2. Add environment variable `DATABASE_URL` with your Supabase PostgreSQL Pooler URI (`AUTH_SECRET` auto-generates via Blueprint).

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
-import { DatabaseSync } from 'node:sqlite';
 import { hashPin } from './auth.js';
 
 // Parse PostgreSQL BIGINT (OID 20) as JavaScript number
@@ -169,6 +168,7 @@ export async function initDatabase(options = {}) {
   loadEnvIfPresent();
 
   if (options.mode === 'memory') {
+    const { DatabaseSync } = await import('node:sqlite');
     const sqlite = new DatabaseSync(':memory:');
     sqlite.exec('PRAGMA foreign_keys = ON;');
     sqlite.exec(SQLITE_TEST_SCHEMA);
